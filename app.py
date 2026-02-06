@@ -4,22 +4,25 @@ import pandas as pd
 
 st.set_page_config(page_title="投資趨勢監控", layout="centered")
 
-# --- 進階 CSS：自定義高亮燈號與漸層能量條 ---
+# --- CSS 修正：移除暈開感，校準色光漸層 ---
 st.markdown("""
     <style>
+    /* 確保字體銳利，無發光陰影 */
     .price-font { font-size: 26px; font-weight: bold; }
     .status-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
     
-    /* 強制修改 Streamlit 進度條樣式 */
+    /* 進度條底色調暗（色光10感） */
+    div[data-testid="stProgress"] > div > div {
+        background-color: #1a1a1a !important;
+        height: 14px;
+        border-radius: 4px;
+    }
+    
+    /* 進度條漸層優化 */
     div[data-testid="stProgress"] > div > div > div > div {
         background-image: var(--bar-gradient) !important;
         background-color: transparent !important;
-        height: 12px;
-        border-radius: 6px;
-    }
-    /* 進度條底色加深 */
-    div[data-testid="stProgress"] > div > div {
-        background-color: #333333 !important;
+        border-radius: 4px;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -46,9 +49,9 @@ p_ndx = (amt_ndx / total * 100) if total > 0 else 0
 p_sox = (amt_sox / total * 100) if total > 0 else 0
 
 def get_pct_color(val):
-    if val > 50: return "#FF0000" # 純紅
-    if val < 50: return "#00FF00" # 純綠
-    return "#FFFFFF" # 白色
+    if val > 50: return "#FF0000" # 高飽和紅
+    if val < 50: return "#00FF00" # 高飽和綠
+    return "#FFFFFF" 
 
 col1, col2 = st.columns(2)
 with col1:
@@ -81,32 +84,32 @@ for i, (code, name) in enumerate(tickers.items()):
         curr, m60, m240, diff = res
         diff_val = diff * 100
         
-        # 狀態燈號與「亮色到深色」漸層設定
+        # 燈號色光 200 (純色) 與 能量條色光 10 -> 200 漸變
         if curr > m60:
-            status, color = "🟢 綠燈 (季線之上)", "#00FF00" # 螢光綠
-            grad = "linear-gradient(to right, #CCFFCC, #00FF00, #006400)" # 淺 -> 亮 -> 深綠
+            status, color = "🟢 綠燈 (季線之上)", "#00FF00"
+            grad = "linear-gradient(to right, #002200, #00FF00)" # 深綠(10) -> 亮綠(200)
         elif curr > m240:
-            status, color = "🟡 黃燈 (跌破季線)", "#FFFF00" # 純黃
-            grad = "linear-gradient(to right, #FFFFCC, #FFFF00, #8B8B00)" # 淺 -> 亮 -> 深黃
+            status, color = "🟡 黃燈 (跌破季線)", "#FFFF00"
+            grad = "linear-gradient(to right, #222200, #FFFF00)" # 深黃(10) -> 亮黃(200)
         else:
-            status, color = "🔴 紅燈 (跌破年線)", "#FF0000" # 純紅
-            grad = "linear-gradient(to right, #FFCCCC, #FF0000, #8B0000)" # 淺 -> 亮 -> 深紅
+            status, color = "🔴 紅燈 (跌破年線)", "#FF0000"
+            grad = "linear-gradient(to right, #220000, #FF0000)" # 深紅(10) -> 亮紅(200)
         
-        # 為進度條注入動態 CSS
+        # 注入動態 CSS 漸層
         st.markdown(f"<style>div[data-testid='stProgress']:nth-of-type({i+1}) div div div div {{ --bar-gradient: {grad}; }}</style>", unsafe_allow_html=True)
 
         st.write(f"### {name}")
         st.write(f"當前點數: **{curr:,.2f}**")
         
-        # 顯示明亮燈號與距季線 %
+        # 顯示標題與距季線 %
         st.markdown(f"""
             <div class="status-header">
-                <span style="color:{color}; font-weight:bold; font-size:20px; text-shadow: 0 0 5px {color};">{status}</span>
+                <span style="color:{color}; font-weight:bold; font-size:20px;">{status}</span>
                 <span style="color:{color}; font-size:18px;">距季線: {diff_val:+.2f}%</span>
             </div>
             """, unsafe_allow_html=True)
         
-        # 能量條長度 (反映與季線的絕對距離強度)
+        # 能量條長度 (0.1為基礎長度以免全黑)
         progress_val = min(max(abs(diff_val) / 30.0, 0.1), 1.0)
         st.progress(progress_val)
     else:
