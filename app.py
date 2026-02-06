@@ -4,21 +4,21 @@ import pandas as pd
 
 st.set_page_config(page_title="投資趨勢監控", layout="centered")
 
-# --- CSS 修正：移除暈開感，校準色光漸層 ---
+# --- CSS 視覺校準：色光 30 漸變至 250 ---
 st.markdown("""
     <style>
-    /* 確保字體銳利，無發光陰影 */
+    /* 銳利化字體與布局 */
     .price-font { font-size: 26px; font-weight: bold; }
-    .status-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .status-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
     
-    /* 進度條底色調暗（色光10感） */
+    /* 進度條底槽：深黑色背景 */
     div[data-testid="stProgress"] > div > div {
-        background-color: #1a1a1a !important;
-        height: 14px;
+        background-color: #050505 !important;
+        height: 18px;
         border-radius: 4px;
     }
     
-    /* 進度條漸層優化 */
+    /* 能量條漸層：色光 30 -> 250 */
     div[data-testid="stProgress"] > div > div > div > div {
         background-image: var(--bar-gradient) !important;
         background-color: transparent !important;
@@ -29,89 +29,10 @@ st.markdown("""
 
 st.title("📊 ETF 趨勢監控 App")
 
-# 1. 金額輸入 (移除小數點)
+# 1. 金額輸入 (整數格式)
 st.subheader("💰 投資金額輸入")
 c_in1, c_in2 = st.columns(2)
 with c_in1:
     amt_ndx = st.number_input("NDX 投入金額", min_value=0, value=30, step=1, format="%d")
 with c_in2:
-    amt_sox = st.number_input("SOX 投入金額", min_value=0, value=20, step=1, format="%d")
-
-# 2. 自動加總
-total = amt_ndx + amt_sox
-st.info(f"💵 總預算 (自動加總): **${total:,}**")
-
-st.divider()
-
-# 3. 佔比與顏色邏輯
-st.subheader("📈 資產配置佔比")
-p_ndx = (amt_ndx / total * 100) if total > 0 else 0
-p_sox = (amt_sox / total * 100) if total > 0 else 0
-
-def get_pct_color(val):
-    if val > 50: return "#FF0000" # 高飽和紅
-    if val < 50: return "#00FF00" # 高飽和綠
-    return "#FFFFFF" 
-
-col1, col2 = st.columns(2)
-with col1:
-    st.write("NDX (NASDAQ 100)")
-    st.markdown(f"<span class='price-font'>${amt_ndx:,}</span> <span style='color:{get_pct_color(p_ndx)}; font-size:20px;'>{p_ndx:.1f}%</span>", unsafe_allow_html=True)
-with col2:
-    st.write("SOX (費城半導體)")
-    st.markdown(f"<span class='price-font'>${amt_sox:,}</span> <span style='color:{get_pct_color(p_sox)}; font-size:20px;'>{p_sox:.1f}%</span>", unsafe_allow_html=True)
-
-st.divider()
-
-# 4. 趨勢監控
-tickers = {"^NDX": "NASDAQ 100 指數", "^SOX": "費城半導體 指數"}
-
-def fetch_data(symbol):
-    try:
-        df = yf.download(symbol, period="1y", progress=False)
-        if df.empty: return None
-        curr = float(df['Close'].iloc[-1])
-        m60 = float(df['Close'].rolling(window=60).mean().iloc[-1])
-        m240 = float(df['Close'].rolling(window=240).mean().iloc[-1])
-        diff_pct = (curr - m60) / m60
-        return curr, m60, m240, diff_pct
-    except: return None
-
-st.subheader("🔍 標的趨勢監控")
-for i, (code, name) in enumerate(tickers.items()):
-    res = fetch_data(code)
-    if res:
-        curr, m60, m240, diff = res
-        diff_val = diff * 100
-        
-        # 燈號色光 200 (純色) 與 能量條色光 10 -> 200 漸變
-        if curr > m60:
-            status, color = "🟢 綠燈 (季線之上)", "#00FF00"
-            grad = "linear-gradient(to right, #002200, #00FF00)" # 深綠(10) -> 亮綠(200)
-        elif curr > m240:
-            status, color = "🟡 黃燈 (跌破季線)", "#FFFF00"
-            grad = "linear-gradient(to right, #222200, #FFFF00)" # 深黃(10) -> 亮黃(200)
-        else:
-            status, color = "🔴 紅燈 (跌破年線)", "#FF0000"
-            grad = "linear-gradient(to right, #220000, #FF0000)" # 深紅(10) -> 亮紅(200)
-        
-        # 注入動態 CSS 漸層
-        st.markdown(f"<style>div[data-testid='stProgress']:nth-of-type({i+1}) div div div div {{ --bar-gradient: {grad}; }}</style>", unsafe_allow_html=True)
-
-        st.write(f"### {name}")
-        st.write(f"當前點數: **{curr:,.2f}**")
-        
-        # 顯示標題與距季線 %
-        st.markdown(f"""
-            <div class="status-header">
-                <span style="color:{color}; font-weight:bold; font-size:20px;">{status}</span>
-                <span style="color:{color}; font-size:18px;">距季線: {diff_val:+.2f}%</span>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        # 能量條長度 (0.1為基礎長度以免全黑)
-        progress_val = min(max(abs(diff_val) / 30.0, 0.1), 1.0)
-        st.progress(progress_val)
-    else:
-        st.error(f"無法取得 {name} 資料")
-    st.write("---")
+    amt_sox = st.number_input("SOX 投入金額",
