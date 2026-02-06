@@ -5,21 +5,21 @@ import pandas as pd
 # 設定網頁標題
 st.set_page_config(page_title="投資趨勢監控", layout="centered")
 
-# --- 核心 CSS：確保字體銳利與漸層色光校準 ---
+# --- 核心 CSS：修復字體暈開與極致漸層校準 ---
 st.markdown("""
     <style>
-    /* 確保字體銳利清晰，完全移除發光濾鏡以防暈開 */
+    /* 1. 確保字體絕對銳利，移除發光效果以防模糊 */
     .price-font { font-size: 26px; font-weight: bold; }
     .status-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
     
-    /* 進度條底槽：極暗黑色背景 */
+    /* 2. 進度條底槽：色調 10 極暗黑背景 */
     div[data-testid="stProgress"] > div > div {
-        background-color: #050505 !important;
-        height: 18px;
+        background-color: #0a0a0a !important;
+        height: 20px;
         border-radius: 4px;
     }
     
-    /* 漸層能量條：色光 30 -> 250 */
+    /* 3. 能量條漸層：色調 30 -> 250 */
     div[data-testid="stProgress"] > div > div > div > div {
         background-image: var(--bar-gradient) !important;
         background-color: transparent !important;
@@ -30,7 +30,7 @@ st.markdown("""
 
 st.title("📊 ETF 趨勢監控 App")
 
-# 1. 投資金額輸入 (設定 format="%d" 以移除小數點)
+# 1. 金額輸入 (使用 format="%d" 移除小數點)
 st.subheader("💰 投資金額輸入")
 c_in1, c_in2 = st.columns(2)
 with c_in1:
@@ -38,20 +38,20 @@ with c_in1:
 with c_in2:
     amt_sox = st.number_input("SOX 投入金額", min_value=0, value=20, step=1, format="%d")
 
-# 2. 自動加總金額
+# 2. 自動加總
 total = amt_ndx + amt_sox
 st.info(f"💵 總預算 (自動加總): **${total:,}**")
 
 st.divider()
 
-# 3. 資產配置佔比 (顏色：大於50%紅, 小於50%綠, 等於50%白)
+# 3. 佔比與顏色邏輯 (大於50%紅, 低於50%綠)
 st.subheader("📈 資產配置佔比")
 p_ndx = (amt_ndx / total * 100) if total > 0 else 0
 p_sox = (amt_sox / total * 100) if total > 0 else 0
 
 def get_pct_color(val):
-    if val > 50: return "#FF0000" # 色光 250 純紅
-    if val < 50: return "#00FF00" # 色光 250 純綠
+    if val > 50: return "#FF0000" # 色光 250 紅
+    if val < 50: return "#00FF00" # 色光 250 綠
     return "#FFFFFF" 
 
 col1, col2 = st.columns(2)
@@ -65,7 +65,7 @@ with col2:
 
 st.divider()
 
-# 4. 標的趨勢監控 (代碼修正：^NDX, ^SOX)
+# 4. 趨勢監控 (指數代碼修正)
 tickers = {"^NDX": "NASDAQ 100 指數", "^SOX": "費城半導體 指數"}
 
 def fetch_data(symbol):
@@ -86,13 +86,12 @@ for i, (code, name) in enumerate(tickers.items()):
         curr, m60, m240, diff = res
         diff_val = diff * 100
         
-        # 精準漸層邏輯：色光 30 (深暗) 漸變至 250 (亮色)
+        # 狀態判定與色調 30 -> 250 漸層
         if curr > m60:
             status, color = "🟢 綠燈 (季線之上)", "#00FF00"
-            grad = "linear-gradient(to right, #001e00, #00FF00)" # 深綠 -> 螢光綠
+            grad = "linear-gradient(to right, #001e00, #00FF00)" # 色調30(深綠) -> 250(螢光綠)
         elif curr > m240:
             status, color = "🟡 黃燈 (跌破季線)", "#FFFF00"
-            grad = "linear-gradient(to right, #1e1e00, #FFFF00)" # 深黃 -> 純黃
+            grad = "linear-gradient(to right, #1e1e00, #FFFF00)" # 色調30(深黃) -> 250(純黃)
         else:
-            status, color = "🔴 紅燈 (跌破年線)", "#FF0000"
-            grad = "linear-gradient(to right
+            status, color =
