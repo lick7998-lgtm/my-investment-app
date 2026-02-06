@@ -2,23 +2,24 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 
+# 設定網頁標題
 st.set_page_config(page_title="投資趨勢監控", layout="centered")
 
-# --- 核心 CSS：精準色光漸層與銳利字體 ---
+# --- 核心 CSS：確保字體銳利與漸層色光校準 ---
 st.markdown("""
     <style>
-    /* 1. 文字銳利化：移除發光陰影，改用高飽和純色 */
+    /* 確保字體銳利清晰，完全移除發光濾鏡以防暈開 */
     .price-font { font-size: 26px; font-weight: bold; }
     .status-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
     
-    /* 2. 進度條底槽：極暗黑處理 */
+    /* 進度條底槽：極暗黑色背景 */
     div[data-testid="stProgress"] > div > div {
         background-color: #050505 !important;
-        height: 20px;
+        height: 18px;
         border-radius: 4px;
     }
     
-    /* 3. 能量條漸層：色光 30 -> 250 */
+    /* 漸層能量條：色光 30 -> 250 */
     div[data-testid="stProgress"] > div > div > div > div {
         background-image: var(--bar-gradient) !important;
         background-color: transparent !important;
@@ -29,7 +30,7 @@ st.markdown("""
 
 st.title("📊 ETF 趨勢監控 App")
 
-# 1. 金額輸入 (移除小數點)
+# 1. 投資金額輸入 (設定 format="%d" 以移除小數點)
 st.subheader("💰 投資金額輸入")
 c_in1, c_in2 = st.columns(2)
 with c_in1:
@@ -37,13 +38,13 @@ with c_in1:
 with c_in2:
     amt_sox = st.number_input("SOX 投入金額", min_value=0, value=20, step=1, format="%d")
 
-# 2. 自動加總
+# 2. 自動加總金額
 total = amt_ndx + amt_sox
 st.info(f"💵 總預算 (自動加總): **${total:,}**")
 
 st.divider()
 
-# 3. 佔比與顏色邏輯 (大於50%紅, 小於50%綠)
+# 3. 資產配置佔比 (顏色：大於50%紅, 小於50%綠, 等於50%白)
 st.subheader("📈 資產配置佔比")
 p_ndx = (amt_ndx / total * 100) if total > 0 else 0
 p_sox = (amt_sox / total * 100) if total > 0 else 0
@@ -56,6 +57,7 @@ def get_pct_color(val):
 col1, col2 = st.columns(2)
 with col1:
     st.write("NDX (NASDAQ 100)")
+    # % 顯示在數字右手邊
     st.markdown(f"<span class='price-font'>${amt_ndx:,}</span> <span style='color:{get_pct_color(p_ndx)}; font-size:20px;'>{p_ndx:.1f}%</span>", unsafe_allow_html=True)
 with col2:
     st.write("SOX (費城半導體)")
@@ -63,7 +65,7 @@ with col2:
 
 st.divider()
 
-# 4. 趨勢監控 (指數代碼修正)
+# 4. 標的趨勢監控 (代碼修正：^NDX, ^SOX)
 tickers = {"^NDX": "NASDAQ 100 指數", "^SOX": "費城半導體 指數"}
 
 def fetch_data(symbol):
@@ -84,34 +86,13 @@ for i, (code, name) in enumerate(tickers.items()):
         curr, m60, m240, diff = res
         diff_val = diff * 100
         
-        # 精準漸層：色光 30 -> 250
+        # 精準漸層邏輯：色光 30 (深暗) 漸變至 250 (亮色)
         if curr > m60:
             status, color = "🟢 綠燈 (季線之上)", "#00FF00"
-            grad = "linear-gradient(to right, #001e00, #00FF00)" # 深綠(30) -> 螢光綠(250)
+            grad = "linear-gradient(to right, #001e00, #00FF00)" # 深綠 -> 螢光綠
         elif curr > m240:
             status, color = "🟡 黃燈 (跌破季線)", "#FFFF00"
-            grad = "linear-gradient(to right, #1e1e00, #FFFF00)" # 深黃(30) -> 螢光黃(250)
+            grad = "linear-gradient(to right, #1e1e00, #FFFF00)" # 深黃 -> 純黃
         else:
             status, color = "🔴 紅燈 (跌破年線)", "#FF0000"
-            grad = "linear-gradient(to right, #1e0000, #FF0000)" # 深紅(30) -> 螢光紅(250)
-        
-        # 注入動態漸層 CSS
-        st.markdown(f"<style>div[data-testid='stProgress']:nth-of-type({i+1}) div div div div {{ --bar-gradient: {grad}; }}</style>", unsafe_allow_html=True)
-
-        st.write(f"### {name}")
-        st.write(f"當前點數: **{curr:,.2f}**")
-        
-        # 高飽和文字與距季線百分比
-        st.markdown(f"""
-            <div class="status-header">
-                <span style="color:{color}; font-weight:bold; font-size:20px;">{status}</span>
-                <span style="color:{color}; font-size:18px;">距季線: {diff_val:+.2f}%</span>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        # 能量條長度：映射乖離強度
-        progress_val = min(max(abs(diff_val) / 30.0, 0.1), 1.0)
-        st.progress(progress_val)
-    else:
-        st.error(f"無法取得 {name} 資料")
-    st.write("---")
+            grad = "linear-gradient(to right
