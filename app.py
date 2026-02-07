@@ -5,7 +5,7 @@ import pandas as pd
 # 設定網頁標題與佈局
 st.set_page_config(page_title="NDX & SOX Monitor", layout="wide")
 
-# --- 核心 CSS：確保字體絕對銳利，移除所有發光/陰影濾鏡 ---
+# --- 核心 CSS：確保字體銳利並維持高對比 ---
 st.markdown("""
 <style>
 * { text-shadow: none !important; -webkit-font-smoothing: antialiased; }
@@ -18,7 +18,7 @@ st.markdown("""
     border-radius: 8px;
     width: 100%;
     height: 26px;
-    margin-top: 12px;
+    margin-top: 10px;
     overflow: hidden;
     border: 1px solid #333;
 }
@@ -27,115 +27,121 @@ st.markdown("""
 .energy-bar-fill {
     height: 26px;
     border-radius: 8px;
-    transition: width 0.5s ease-in-out;
+    transition: width 0.6s ease-in-out;
 }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 抓取指數資料 ---
+# --- 抓資料與 MA 計算 ---
 def fetch_index_data(symbol):
     try:
         data = yf.download(symbol, period="2y", progress=False)
         if data.empty:
             return None
+
         current = float(data["Close"].iloc[-1])
         ma60 = float(data["Close"].rolling(60).mean().iloc[-1])
         ma240 = float(data["Close"].rolling(240).mean().iloc[-1])
         pct = ((current - ma60) / ma60) * 100
+
         return current, ma60, ma240, pct
     except:
         return None
 
-# --- 顏色與漸層規則 (色光 100 → 250) ---
+# --- 顏色判斷 + 色光漸層（100 → 250） ---
 def get_style_config(pct, current, ma240):
     if current < ma240:  # 🔴 跌破年線
-        status = "🔴 紅燈 (跌破年線)"
-        color_hex = "#FF0000"
-        gradient = "linear-gradient(to right, rgb(100,0,0), rgb(250,0,0))"
-    elif pct < 0:  # 🟡 跌破季線
-        status = "🟡 黃燈 (跌破季線)"
-        color_hex = "#FFFF00"
-        gradient = "linear-gradient(to right, rgb(100,100,0), rgb(250,250,0))"
-    else:  # 🟢 季線之上
-        status = "🟢 綠燈 (季線之上)"
-        color_hex = "#00FF00"
-        gradient = "linear-gradient(to right, rgb(0,100,0), rgb(0,250,0))"
-    return status, color_hex, gradient
+        status, color_hex = "🔴 紅燈 (跌破年線)", "#FF0000"
+        grad = "linear-gradient(to right, rgb(100,0,0), rgb(250,0,0))"
 
-# --- 主 UI ---
+    elif pct < 0:  # 🟡 跌破季線
+        status, color_hex = "🟡 黃燈 (跌破季線)", "#FFFF00"
+        grad = "linear-gradient(to right, rgb(100,100,0), rgb(250,250,0))"
+
+    else:  # 🟢 季線之上
+        status, color_hex = "🟢 綠燈 (季線之上)", "#00FF00"
+        grad = "linear-gradient(to right, rgb(0,100,0), rgb(0,250,0))"
+
+    return status, color_hex, grad
+
+# --- UI 標題 ---
 st.title("📡 NDX & SOX 指數監控系統")
 
-# 1. 投資金額輸入
+# --- 投資金額輸入 ---
 st.subheader("💰 投資金額輸入")
 col_in1, col_in2 = st.columns(2)
 
 with col_in1:
     amt_ndx = st.number_input("NDX 投入金額 (USD)", min_value=0, value=0, step=1, format="%d")
+
 with col_in2:
     amt_sox = st.number_input("SOX 投入金額 (USD)", min_value=0, value=0, step=1, format="%d")
 
-# 2. 自動加總與比例
+# 自動加總
 total = amt_ndx + amt_sox
 p_ndx = (amt_ndx / total * 100) if total > 0 else 0
 p_sox = (amt_sox / total * 100) if total > 0 else 0
 
-st.info(f"💵 總預算 (自動加總): **${total:,}**")
+st.info(f"💵 總預算 (自動加總)：**${total:,}**")
 
-# 3. 投資佔比顏色
-def ratio_color(v):
-    if v > 50: return "#FF0000"
-    if v < 50: return "#00FF00"
-    return "#FFFFFF"
+# --- 佔比顏色 ---
+def ratio_color(val):
+    if val > 50: return "#FF0000"  # >50% 紅
+    if val < 50: return "#00FF00"  # <50% 綠
+    return "#FFFFFF"               # =50% 白
 
-c1, c2 = st.columns(2)
-c1.markdown(f"NDX 佔比：<span style='color:{ratio_color(p_ndx)}; font-size:24px; font-weight:bold;'>{p_ndx:.1f}%</span>", unsafe_allow_html=True)
-c2.markdown(f"SOX 佔比：<span style='color:{ratio_color(p_sox)}; font-size:24px; font-weight:bold;'>{p_sox:.1f}%</span>", unsafe_allow_html=True)
+c_p1, c_p2 = st.columns(2)
+c_p1.markdown(
+    f"NDX 佔比：<span style='color:{ratio_color(p_ndx)}; font-size:24px; font-weight:bold;'>{p_ndx:.1f}%</span>",
+    unsafe_allow_html=True,
+)
+c_p2.markdown(
+    f"SOX 佔比：<span style='color:{ratio_color(p_sox)}; font-size:24px; font-weight:bold;'>{p_sox:.1f}%</span>",
+    unsafe_allow_html=True,
+)
 
 st.divider()
 
-# 4. 指數顯示
-tickers = {"^NDX": "NASDAQ 100 (NDX)", "^SOX": "費城半導體 (SOX)"}
-colA, colB = st.columns(2)
+# --- 指數分析 ---
+tickers = {
+    "^NDX": "NASDAQ 100 (NDX)",
+    "^SOX": "費城半導體 (SOX)"
+}
 
-for i, (symbol, title) in enumerate(tickers.items()):
+col_display1, col_display2 = st.columns(2)
+
+for i, (symbol, display_name) in enumerate(tickers.items()):
     res = fetch_index_data(symbol)
-    with (colA if i == 0 else colB):
 
-        if not res:
-            st.error(f"無法獲取 {title} 資料")
-            continue
+    with (col_display1 if i == 0 else col_display2):
+        if res:
+            curr, m60, m240, pct = res
+            status_text, highlight_color, bar_gradient = get_style_config(pct, curr, m240)
 
-        curr, m60, m240, pct = res
-        status, color_hex, gradient = get_style_config(pct, curr, m240)
+            # 數據
+            st.markdown(f"<div class='metric-title' style='color:{highlight_color};'>{display_name}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='value-text' style='color:{highlight_color};'>目前價格：{int(curr):,}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='value-text' style='color:{highlight_color};'>季線 MA60：{int(m60):,}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='value-text' style='color:{highlight_color};'>年線 MA240：{int(m240):,}</div>", unsafe_allow_html=True)
 
-        # 標題 + 即時數據
-        st.markdown(f"<div class='metric-title' style='color:{color_hex};'>{title}</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='value-text' style='color:{color_hex};'>目前價格：{int(curr):,}</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='value-text' style='color:{color_hex};'>季線 MA60：{int(m60):,}</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='value-text' style='color:{color_hex};'>年線 MA240：{int(m240):,}</div>", unsafe_allow_html=True)
+            # 燈號 + 季線距離
+            st.markdown(
+                f"<div style='color:{highlight_color}; font-weight:bold; font-size:20px; margin-top:10px; "
+                f"display:flex; justify-content:space-between;'>"
+                f"<span>{status_text}</span>"
+                f"<span>距季線：{pct:+.2f}%</span>"
+                f"</div>",
+                unsafe_allow_html=True
+            )
 
-        # 狀態列
-        st.markdown(
-            f"""
-            <div style='color:{color_hex}; font-weight:bold; font-size:20px; margin-top:10px;
-            display:flex; justify-content:space-between;'>
-                <span>{status}</span>
-                <span>距季線：{pct:+.2f}%</span>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+            # --- 🌈 能量條（最小 5%，最大 50%，依距離動態縮放） ---
+            fill_width = min(max(abs(pct), 5.0), 50.0)
 
-        # --- 能量條：依距離縮放，最大 50%，最小 5% ---
-        fill_width = min(max(abs(pct), 5), 50)
-
-        st.markdown(
-            f"""
-            <div class='energy-bar-container'>
-                <div class='energy-bar-fill'
-                    style='width:{fill_width}%; background:{gradient};'>
+            st.markdown(f"""
+                <div class='energy-bar-container'>
+                    <div class='energy-bar-fill' style='width: {fill_width}%; background: {bar_gradient};'></div>
                 </div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+            """, unsafe_allow_html=True)
+
+        else:
+            st.error(f"❌ 無法獲取 {display_name} 數據")
