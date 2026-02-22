@@ -2,86 +2,121 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 
-# 設定網頁標題與佈局
-st.set_page_config(page_title="投資趨勢監控系統", layout="wide")
+st.set_page_config(
+    page_title="投資趨勢監控系統",
+    layout="wide"
+)
 
-# --- 核心 CSS：確保字體絕對銳利 + 佈局控制 ---
-st.markdown("""
+# 縮短 CSS 長度，分行寫避免被截斷
+CSS = """
 <style>
-* { text-shadow: none !important; -webkit-font-smoothing: antialiased; }
-.metric-title { font-size: 26px; font-weight: 700; margin-bottom: 5px; }
-.value-text { font-size: 22px; font-weight: 600; margin-bottom: 5px; }
-.formula-text { font-size: 16px; font-weight: 500; color: #AAAAAA; margin-bottom: 8px; }
-/* 能量條底槽：深色背景 */
-.energy-bar-container { background-color: #0d0d0d; border-radius: 8px; width: 100%; height: 26px; margin-top: 10px; overflow: hidden; border: 1px solid #333; }
-/* 能量條填充：色光 100 -> 250 漸層 */
-.energy-bar-fill { height: 26px; border-radius: 8px; transition: width 0.6s ease-in-out; }
+* { text-shadow: none !important; }
+.title { font-size: 26px; font-weight: bold; }
+.val { font-size: 22px; font-weight: bold; }
+.form { font-size: 16px; color: #AAA; }
+.bar-bg {
+    background: #0d0d0d;
+    border-radius: 8px;
+    width: 100%;
+    height: 26px;
+    margin-top: 10px;
+}
+.bar-fill {
+    height: 26px;
+    border-radius: 8px;
+}
 </style>
-""", unsafe_allow_html=True)
+"""
+st.markdown(CSS, unsafe_allow_html=True)
 
-
-# ==========================================
-# 🚀 模組 1：極速抓取最新價 (專為 XAUD 設計)
-# ==========================================
 def safe_price(ticker):
-    """安全抓取 Yahoo 最新成交價，加入強效 fallback 防呆機制"""
     try:
         tk = yf.Ticker(ticker)
-        
-        # 嘗試 1：使用 fast_info 即時報價 (兼容新舊版 yfinance)
         try:
             if hasattr(tk, 'fast_info'):
                 info = tk.fast_info
-                # 兼容字典取值與屬性取值
-                price = info.get("lastPrice") if hasattr(info, 'get') else getattr(info, 'last_price', None)
-                if price: return float(price)
+                if hasattr(info, 'get'):
+                    p = info.get("lastPrice")
+                else:
+                    p = getattr(info, 'last_price', None)
+                if p: return float(p)
         except:
             pass
         
-        # 嘗試 2：使用 5天歷史數據保底 (過濾週末 NaN，最穩定)
         hist = tk.history(period="5d")
         if not hist.empty and 'Close' in hist.columns:
-            clean_hist = hist['Close'].dropna()
-            if not clean_hist.empty:
-                return float(clean_hist.iloc[-1])
-                
-    except Exception:
+            clean = hist['Close'].dropna()
+            if not clean.empty:
+                return float(clean.iloc[-1])
+    except:
         return None
     return None
 
-
-# ==========================================
-# 📊 模組 2：抓取含均線的歷史資料 (NDX, SOX, GDX)
-# ==========================================
-def fetch_index_data(symbol):
+def fetch_data(symbol):
     try:
         df = yf.download(symbol, period="2y", progress=False)
         if df.empty: return None
         
-        # 兼容新版 yfinance
         if isinstance(df.columns, pd.MultiIndex):
-            close_series = df['Close'].iloc[:, 0]
+            s = df['Close'].iloc[:, 0]
         else:
-            close_series = df['Close']
+            s = df['Close']
             
-        close_series = close_series.dropna()
-        if close_series.empty: return None
+        s = s.dropna()
+        if s.empty: return None
         
-        current = float(close_series.iloc[-1])
-        ma60 = float(close_series.rolling(60).mean().dropna().iloc[-1])
-        ma240 = float(close_series.rolling(240).mean().dropna().iloc[-1])
+        curr = float(s.iloc[-1])
+        m60 = float(s.rolling(60).mean().dropna().iloc[-1])
+        m240 = float(s.rolling(240).mean().dropna().iloc[-1])
         
-        pct = ((current - ma60) / ma60) * 100
-        return current, ma60, ma240, pct
-    except Exception:
+        pct = ((curr - m60) / m60) * 100
+        return curr, m60, m240, pct
+    except:
         return None
 
+def get_style(pct, curr, m240):
+    # 這裡原本太長導致您截圖報錯，我已將其分成極短的行
+    if curr < m240:
+        return (
+            "🔴 紅燈 (跌破年線)",
+            "#FF0000",
+            "linear-gradient(90deg, #640000, #FA0000)"
+        )
+    elif pct < 0:
+        return (
+            "🟡 黃燈 (跌破季線)",
+            "#FFFF00",
+            "linear-gradient(90deg, #646400, #FAFA00)"
+        )
+    else:
+        return (
+            "🟢 綠燈 (季線之上)",
+            "#00FF00",
+            "linear-gradient(90deg, #006400, #00FA00)"
+        )
 
-# --- 顏色與漸層配置 (100 -> 250) ---
-def get_style_config(pct, current, ma240):
-    if current < ma240: 
-        return "🔴 紅燈 (跌破年線)", "#FF0000", "linear-gradient(to right, rgb(100,0,0), rgb(250,0,0))"
-    elif pct < 0: 
-        return "🟡 黃燈 (跌破季線)", "#FFFF00", "linear-gradient(to right, rgb(100,100,0), rgb(250,250,0))"
-    else: 
-        return "🟢 綠燈 (季線之上)", "#00FF00", "linear-gradient(to right, rgb(0,100,0), rgb
+st.title("📡 投資趨勢監控系統")
+
+st.subheader("💰 投資金額輸入")
+c1, c2 = st.columns(2)
+with c1:
+    amt_n = st.number_input("NDX", value=0, format="%d")
+with c2:
+    amt_s = st.number_input("SOX", value=0, format="%d")
+
+tot = amt_n + amt_s
+pn = (amt_n / tot * 100) if tot > 0 else 0
+ps = (amt_s / tot * 100) if tot > 0 else 0
+st.info(f"💵 總預算: **${tot:,}**")
+
+def c_pct(v):
+    if v > 50: return "#FF0000"
+    if v < 50: return "#00FF00"
+    return "#FFFFFF"
+
+cp1, cp2 = st.columns(2)
+html_n = f"<span style='color:{c_pct(pn)};'>{pn:.1f}%</span>"
+cp1.markdown(f"NDX: **{html_n}**", unsafe_allow_html=True)
+
+html_s = f"<span style='color:{c_pct(ps)};'>{ps:.1f}%</span>"
+cp2.markdown(f
