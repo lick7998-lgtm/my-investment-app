@@ -18,13 +18,13 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 資料抓取與安全計算 (徹底解決 ValueError) ---
+# --- 資料抓取與安全計算 (解決 ValueError) ---
 def fetch_index_data(symbol):
     try:
         df = yf.download(symbol, period="2y", progress=False)
         if df.empty: return None
         
-        # 兼容新版 yfinance，確保取出純數值的 Series
+        # 兼容新版 yfinance
         if isinstance(df.columns, pd.MultiIndex):
             close_series = df['Close'].iloc[:, 0]
         else:
@@ -32,7 +32,6 @@ def fetch_index_data(symbol):
             
         close_series = close_series.dropna()
         
-        # 強制轉換為 float 單一數值，避免 if 判斷式報錯
         current = float(close_series.iloc[-1])
         ma60 = float(close_series.rolling(60).mean().dropna().iloc[-1])
         ma240 = float(close_series.rolling(240).mean().dropna().iloc[-1])
@@ -40,6 +39,17 @@ def fetch_index_data(symbol):
         pct = ((current - ma60) / ma60) * 100
         return current, ma60, ma240, pct
     except Exception as e:
+        return None
+
+# --- 取得單一匯率 ---
+def fetch_fx_rate(symbol):
+    try:
+        df = yf.download(symbol, period="1d", progress=False)
+        if isinstance(df.columns, pd.MultiIndex):
+            return float(df['Close'].iloc[-1, 0])
+        else:
+            return float(df['Close'].iloc[-1])
+    except:
         return None
 
 # --- 顏色與漸層配置 (100 -> 250) ---
@@ -83,12 +93,17 @@ c_p2.markdown(f"SOX 佔比：<span style='color:{ratio_color(p_sox)}; font-size:
 
 st.divider()
 
+# --- 抓取匯率 (AUD/USD) 用於後台換算 ---
+audusd_rate = fetch_fx_rate("AUDUSD=X")
+if not audusd_rate:
+    st.warning("⚠️ 無法取得 AUD/USD 匯率，黃金換算可能受影響。")
+
 # 4. 指數監控與能量條 (自動化 2x2 網格佈局)
-# 🎯 黃金現貨使用直接對應 5000 多點的 XAUAUD=X，且保留 GDX
+# 🎯 黃金改抓 XAUUSD=X，之後在顯示時換算為 XAUD
 tickers = {
     "^NDX": "NASDAQ 100 (NDX)", 
     "^SOX": "費城半導體 (SOX)",
-    "XAUAUD=X": "黃金現貨 (XAUD)",
+    "XAUUSD=X": "黃金現貨 (XAUD)",
     "GDX": "黃金礦業 ETF (GDX)"
 }
 
@@ -104,10 +119,17 @@ for i in range(0, len(items), 2):
                 res = fetch_index_data(symbol)
                 if res:
                     curr, m60, m240, pct = res
+                    
+                    # 🎯 針對黃金現貨進行後台匯率換算 (XAUUSD -> XAUD)
+                    if symbol == "XAUUSD=X" and audusd_rate:
+                        curr = curr / audusd_rate
+                        m60 = m60 / audusd_rate
+                        m240 = m240 / audusd_rate
+                    
                     status_text, h_color, bar_grad = get_style_config(pct, curr, m240)
                     
                     # --- 智慧小數點判斷 ---
-                    # 只有 GDX 價格較低保留 2 位小數，包含 XAUD 在內的高價標的全部改為整數顯示！
+                    # 只有 GDX 價格較低保留 2 位小數，包含換算後的 XAUD 在內的高價標的全部改為整數顯示！
                     if symbol == "GDX":
                         v_curr, v_m60, v_m240 = f"{curr:,.2f}", f"{m60:,.2f}", f"{m240:,.2f}"
                     else:
@@ -116,17 +138,4 @@ for i in range(0, len(items), 2):
                     # 顏色同動與文字渲染
                     st.markdown(f"<div class='metric-title' style='color:{h_color};'>{name}</div>", unsafe_allow_html=True)
                     st.markdown(f"<div class='value-text' style='color:{h_color};'>當前報價：{v_curr}</div>", unsafe_allow_html=True)
-                    st.markdown(f"<div class='value-text' style='color:{h_color};'>季線 MA60：{v_m60}</div>", unsafe_allow_html=True)
-                    st.markdown(f"<div class='value-text' style='color:{h_color};'>年線 MA240：{v_m240}</div>", unsafe_allow_html=True)
-                    
-                    # 顯示燈號與百分比
-                    st.markdown(f"<div style='color:{h_color}; font-weight:bold; font-size:20px; margin-top:10px; display:flex; justify-content:space-between;'>"
-                                f"<span>{status_text}</span><span>距季線：{pct:+.2f}%</span></div>", unsafe_allow_html=True)
-                    
-                    # 能量條長度：連動百分比，最高限制 40% (保底 5% 以顯示顏色)
-                    fill_width = min(max(abs(pct), 5.0), 40.0) 
-                    st.markdown(f"<div class='energy-bar-container'><div class='energy-bar-fill' style='width: {fill_width}%; background: {bar_grad};'></div></div>", unsafe_allow_html=True)
-                else:
-                    st.error(f"無法獲取 {name} 數據，請稍後再試。")
-    # 每排之間加入一點間距
-    st.write("<br>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='value-text
