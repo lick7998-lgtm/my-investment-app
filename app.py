@@ -102,4 +102,20 @@ for i in range(0, len(items), 2):
                     else:
                         v_curr, v_m60, v_m240 = f"{int(curr):,}", f"{int(m60):,}", f"{int(m240):,}"
                     
-                    #
+                    # 顏色同動與文字渲染
+                    st.markdown(f"<div class='metric-title' style='color:{h_color};'>{name}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='value-text' style='color:{h_color};'>當前報價：{v_curr}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='value-text' style='color:{h_color};'>季線 MA60：{v_m60}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='value-text' style='color:{h_color};'>年線 MA240：{v_m240}</div>", unsafe_allow_html=True)
+                    
+                    # 顯示燈號與百分比
+                    st.markdown(f"<div style='color:{h_color}; font-weight:bold; font-size:20px; margin-top:10px; display:flex; justify-content:space-between;'>"
+                                f"<span>{status_text}</span><span>距季線：{pct:+.2f}%</span></div>", unsafe_allow_html=True)
+                    
+                    # 能量條長度：連動百分比，最高限制 40% (保底 5% 以顯示顏色)
+                    fill_width = min(max(abs(pct), 5.0), 40.0) 
+                    st.markdown(f"<div class='energy-bar-container'><div class='energy-bar-fill' style='width: {fill_width}%; background: {bar_grad};'></div></div>", unsafe_allow_html=True)
+                else:
+                    st.error(f"無法獲取 {name} 數據")
+    # 每排之間加入一點間距
+    st.write("<br>", unsafe_allow_html=True)
