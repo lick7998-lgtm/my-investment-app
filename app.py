@@ -32,6 +32,7 @@ def fetch_index_data(symbol):
             close_series = df['Close']
             
         close_series = close_series.dropna()
+        if close_series.empty: return None
         
         current = float(close_series.iloc[-1])
         ma60 = float(close_series.rolling(60).mean().dropna().iloc[-1])
@@ -42,16 +43,23 @@ def fetch_index_data(symbol):
     except Exception:
         return None
 
-# --- 單純取得最新報價 (用於黃金與匯率算式) ---
+# --- 單純取得最新報價 (加入空值剔除，徹底解決週末報錯) ---
 def fetch_latest_price(symbol):
     try:
-        df = yf.download(symbol, period="5d", progress=False)
+        # 區間拉長到 1個月，確保一定有資料
+        df = yf.download(symbol, period="1mo", progress=False)
         if df.empty: return None
         
         if isinstance(df.columns, pd.MultiIndex):
-            return float(df['Close'].iloc[-1, 0])
+            close_series = df['Close'].iloc[:, 0]
         else:
-            return float(df['Close'].iloc[-1])
+            close_series = df['Close']
+            
+        # 關鍵除錯點：徹底剔除週末產生的 NaN 空值
+        close_series = close_series.dropna()
+        if close_series.empty: return None
+        
+        return float(close_series.iloc[-1])
     except Exception:
         return None
 
@@ -92,8 +100,7 @@ c_p2.markdown(f"SOX 佔比：<span style='color:{ratio_color(p_sox)}; font-size:
 
 st.divider()
 
-# 4. 指數監控與能量條 (自動化 2x2 網格佈局)
-# 🎯 設定一個特殊的標記 "XAUD_CUSTOM" 來觸發自訂算式邏輯
+# 4. 指數監控與能量條
 tickers = [
     ("^NDX", "NASDAQ 100 (NDX)"), 
     ("^SOX", "費城半導體 (SOX)"),
@@ -101,7 +108,6 @@ tickers = [
     ("GDX", "黃金礦業 ETF (GDX)")
 ]
 
-# 每 2 個標的產生一排，達成 2x2 佈局
 for i in range(0, len(tickers), 2):
     cols = st.columns(2)
     for j in range(2):
@@ -110,17 +116,16 @@ for i in range(0, len(tickers), 2):
             with cols[j]:
                 
                 # ==========================================
-                # 🟡 針對 XAUD 的特製邏輯 (顯示算式、無均線、無能量條)
+                # 🟡 針對 XAUD 的特製邏輯 (顯示算式、無小數點、無均線/能量條)
                 # ==========================================
                 if symbol == "XAUD_CUSTOM":
                     gold_usd = fetch_latest_price("XAUUSD=X")
                     aud_usd = fetch_latest_price("AUDUSD=X")
                     
                     if gold_usd and aud_usd:
-                        # 換算公式：黃金/美元 ÷ 澳幣/美元 = 黃金/澳幣
+                        # 換算公式：黃金/美元 ÷ 澳幣/美元 = 黃金/澳幣，並強制轉為整數
                         xaud_val = int(gold_usd / aud_usd)
                         
-                        # 渲染客製化區塊
                         st.markdown(f"<div class='metric-title' style='color:#FFD700;'>{name}</div>", unsafe_allow_html=True)
                         st.markdown(f"<div class='formula-text'>算式：XAUUSD ({gold_usd:,.2f}) ÷ AUDUSD ({aud_usd:.4f})</div>", unsafe_allow_html=True)
                         st.markdown(f"<div class='value-text' style='color:#FFD700; font-size: 28px;'>當前報價：{xaud_val:,}</div>", unsafe_allow_html=True)
@@ -128,7 +133,7 @@ for i in range(0, len(tickers), 2):
                         st.error("無法獲取計算 XAUD 所需的美元黃金或匯率數據。")
                         
                 # ==========================================
-                # 🟢 針對 NDX, SOX, GDX 的標準邏輯 (顯示完整指標)
+                # 🟢 針對 NDX, SOX, GDX 的標準邏輯
                 # ==========================================
                 else:
                     res = fetch_index_data(symbol)
@@ -136,7 +141,6 @@ for i in range(0, len(tickers), 2):
                         curr, m60, m240, pct = res
                         status_text, h_color, bar_grad = get_style_config(pct, curr, m240)
                         
-                        # 智慧小數點判斷：GDX 留2位小數，其餘整數
                         if symbol == "GDX":
                             v_curr, v_m60, v_m240 = f"{curr:,.2f}", f"{m60:,.2f}", f"{m240:,.2f}"
                         else:
@@ -154,7 +158,6 @@ for i in range(0, len(tickers), 2):
                         """
                         st.markdown(html_content, unsafe_allow_html=True)
                         
-                        # 能量條
                         fill_width = min(max(abs(pct), 5.0), 40.0) 
                         bar_html = f"""
                         <div class='energy-bar-container'>
