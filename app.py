@@ -45,7 +45,7 @@ def get_style_config(pct, current, ma240):
 
 st.title("📡 投資趨勢監控系統")
 
-# 1. 投資金額輸入 (新增 債券與黃金)
+# 1. 投資金額輸入 (包含 NDX, SOX, 債券, 黃金)
 st.subheader("💰 投資金額輸入")
 col_in1, col_in2, col_in3, col_in4 = st.columns(4)
 with col_in1:
@@ -61,9 +61,9 @@ with col_in4:
 total = amt_ndx + amt_sox + amt_bond + amt_gold
 st.info(f"💵 總投資預算 (自動加總): **${total:,}**")
 
-# 3. 顯示佔比 (四個項目的百分比計算)
+# 3. 顯示佔比
 def ratio_color(val):
-    if val > 40: return "#FF4B4B"  # 佔比過高提醒
+    if val > 40: return "#FF4B4B"
     return "#00FF00"
 
 if total > 0:
@@ -78,12 +78,11 @@ if total > 0:
 
 st.divider()
 
-# 4. 指數監控與能量條
-# 這裡使用 XAUAUD=X 作為黃金報價來源，以符合您要求的 5096 水準
+# 4. 指數監控與能量條 (已將代碼設回 GC=F)
 tickers = {
     "^NDX": "NASDAQ 100 (NDX)", 
     "^SOX": "費城半導體 (SOX)",
-    "XAUAUD=X": "國際黃金 (XAU/AUD)",
+    "GC=F": "國際黃金 (GC=F)",
     "GDX": "黃金礦業 ETF (GDX)"
 }
 
@@ -101,7 +100,7 @@ for i in range(0, len(items), 2):
                     status_text, h_color, bar_grad = get_style_config(pct, curr, m240)
                     
                     # 智慧顯示：黃金與 GDX 保留小數點，其餘整數
-                    if symbol in ["GDX", "XAUAUD=X"]:
+                    if symbol in ["GDX", "GC=F"]:
                         v_curr, v_m60, v_m240 = f"{curr:,.2f}", f"{m60:,.2f}", f"{m240:,.2f}"
                     else:
                         v_curr, v_m60, v_m240 = f"{int(curr):,}", f"{int(m60):,}", f"{int(m240):,}"
