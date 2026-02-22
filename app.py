@@ -5,27 +5,23 @@ import pandas as pd
 # 設定網頁標題與佈局
 st.set_page_config(page_title="投資趨勢監控系統", layout="wide")
 
-# --- 核心 CSS：確保字體絕對銳利 + 能量條寬度控制 ---
+# --- 核心 CSS ---
 st.markdown("""
 <style>
 * { text-shadow: none !important; -webkit-font-smoothing: antialiased; }
 .metric-title { font-size: 26px; font-weight: 700; margin-bottom: 5px; }
 .value-text { font-size: 22px; font-weight: 600; margin-bottom: 5px; }
-/* 能量條底槽：深色背景 */
 .energy-bar-container { background-color: #0d0d0d; border-radius: 8px; width: 100%; height: 26px; margin-top: 10px; overflow: hidden; border: 1px solid #333; }
-/* 能量條填充：色光 100 -> 250 漸層 */
 .energy-bar-fill { height: 26px; border-radius: 8px; transition: width 0.6s ease-in-out; }
 </style>
 """, unsafe_allow_html=True)
 
 # --- 資料抓取與計算 ---
-@st.cache_data(ttl=300) # 加入快取機制，每 5 分鐘更新一次，提升載入速度
+@st.cache_data(ttl=300)
 def fetch_index_data(symbol):
     try:
-        # 抓取 2 年資料以計算 MA240
         data = yf.download(symbol, period="2y", progress=False)
         if data.empty: return None
-        # 確保取回單一數值
         current = float(data["Close"].iloc[-1])
         ma60 = float(data["Close"].rolling(60).mean().iloc[-1])
         ma240 = float(data["Close"].rolling(240).mean().iloc[-1])
@@ -34,53 +30,60 @@ def fetch_index_data(symbol):
     except Exception as e:
         return None
 
-# --- 顏色與漸層配置 (100 -> 250) ---
+# --- 顏色與漸層配置 ---
 def get_style_config(pct, current, ma240):
-    if current < ma240: # 🔴 跌破年線 -> 紅燈
+    if current < ma240:
         status, color_hex = "🔴 紅燈 (跌破年線)", "#FF0000"
         grad = "linear-gradient(to right, rgb(100,0,0), rgb(250,0,0))"
-    elif pct < 0: # 🟡 跌破季線 -> 黃燈
+    elif pct < 0:
         status, color_hex = "🟡 黃燈 (跌破季線)", "#FFFF00"
         grad = "linear-gradient(to right, rgb(100,100,0), rgb(250,250,0))"
-    else: # 🟢 季線之上 -> 綠燈
+    else:
         status, color_hex = "🟢 綠燈 (季線之上)", "#00FF00"
         grad = "linear-gradient(to right, rgb(0,100,0), rgb(0,250,0))"
     return status, color_hex, grad
 
 st.title("📡 投資趨勢監控系統")
 
-# 1. 投資金額輸入
+# 1. 投資金額輸入 (新增 債券與黃金)
 st.subheader("💰 投資金額輸入")
-col_in1, col_in2 = st.columns(2)
+col_in1, col_in2, col_in3, col_in4 = st.columns(4)
 with col_in1:
-    amt_ndx = st.number_input("NDX 投入金額 (USD)", min_value=0, value=0, step=1, format="%d")
+    amt_ndx = st.number_input("NDX 金額 (USD)", min_value=0, value=0, step=100)
 with col_in2:
-    amt_sox = st.number_input("SOX 投入金額 (USD)", min_value=0, value=0, step=1, format="%d")
+    amt_sox = st.number_input("SOX 金額 (USD)", min_value=0, value=0, step=100)
+with col_in3:
+    amt_bond = st.number_input("債券金額 (USD)", min_value=0, value=0, step=100)
+with col_in4:
+    amt_gold = st.number_input("黃金金額 (USD)", min_value=0, value=0, step=100)
 
 # 2. 自動加總
-total = amt_ndx + amt_sox
-p_ndx = (amt_ndx / total * 100) if total > 0 else 0
-p_sox = (amt_sox / total * 100) if total > 0 else 0
-st.info(f"💵 總預算 (自動加總): **${total:,}**")
+total = amt_ndx + amt_sox + amt_bond + amt_gold
+st.info(f"💵 總投資預算 (自動加總): **${total:,}**")
 
-# 3. 顯示佔比
+# 3. 顯示佔比 (四個項目的百分比計算)
 def ratio_color(val):
-    if val > 50: return "#FF0000"
-    if val < 50: return "#00FF00"
-    return "#FFFFFF"
+    if val > 40: return "#FF4B4B"  # 佔比過高提醒
+    return "#00FF00"
 
-c_p1, c_p2 = st.columns(2)
-c_p1.markdown(f"NDX 佔比：<span style='color:{ratio_color(p_ndx)}; font-size:24px; font-weight:bold;'>{p_ndx:.1f}%</span>", unsafe_allow_html=True)
-c_p2.markdown(f"SOX 佔比：<span style='color:{ratio_color(p_sox)}; font-size:24px; font-weight:bold;'>{p_sox:.1f}%</span>", unsafe_allow_html=True)
+if total > 0:
+    p_ndx, p_sox = (amt_ndx/total)*100, (amt_sox/total)*100
+    p_bond, p_gold = (amt_bond/total)*100, (amt_gold/total)*100
+    
+    c_p1, c_p2, c_p3, c_p4 = st.columns(4)
+    c_p1.markdown(f"NDX 佔比<br><span style='color:{ratio_color(p_ndx)}; font-size:24px; font-weight:bold;'>{p_ndx:.1f}%</span>", unsafe_allow_html=True)
+    c_p2.markdown(f"SOX 佔比<br><span style='color:{ratio_color(p_sox)}; font-size:24px; font-weight:bold;'>{p_sox:.1f}%</span>", unsafe_allow_html=True)
+    c_p3.markdown(f"債券 佔比<br><span style='color:{ratio_color(p_bond)}; font-size:24px; font-weight:bold;'>{p_bond:.1f}%</span>", unsafe_allow_html=True)
+    c_p4.markdown(f"黃金 佔比<br><span style='color:{ratio_color(p_gold)}; font-size:24px; font-weight:bold;'>{p_gold:.1f}%</span>", unsafe_allow_html=True)
 
 st.divider()
 
-# 4. 指數監控與能量條 (自動化 2x2 網格佈局)
-# 已將黃金代碼修正為 GC=F 以匹配 5000+ 的報價
+# 4. 指數監控與能量條
+# 這裡使用 XAUAUD=X 作為黃金報價來源，以符合您要求的 5096 水準
 tickers = {
     "^NDX": "NASDAQ 100 (NDX)", 
     "^SOX": "費城半導體 (SOX)",
-    "GC=F": "國際黃金 (GC=F)",
+    "XAUAUD=X": "國際黃金 (XAU/AUD)",
     "GDX": "黃金礦業 ETF (GDX)"
 }
 
@@ -97,9 +100,8 @@ for i in range(0, len(items), 2):
                     curr, m60, m240, pct = res
                     status_text, h_color, bar_grad = get_style_config(pct, curr, m240)
                     
-                    # --- 智慧小數點判斷 ---
-                    # 針對黃金與 GDX 顯示小數點，其餘整數
-                    if symbol in ["GDX", "GC=F"]:
+                    # 智慧顯示：黃金與 GDX 保留小數點，其餘整數
+                    if symbol in ["GDX", "XAUAUD=X"]:
                         v_curr, v_m60, v_m240 = f"{curr:,.2f}", f"{m60:,.2f}", f"{m240:,.2f}"
                     else:
                         v_curr, v_m60, v_m240 = f"{int(curr):,}", f"{int(m60):,}", f"{int(m240):,}"
@@ -114,6 +116,4 @@ for i in range(0, len(items), 2):
                     
                     fill_width = min(max(abs(pct), 5.0), 40.0) 
                     st.markdown(f"<div class='energy-bar-container'><div class='energy-bar-fill' style='width: {fill_width}%; background: {bar_grad};'></div></div>", unsafe_allow_html=True)
-                else:
-                    st.error(f"無法獲取 {name} 數據")
     st.write("<br>", unsafe_allow_html=True)
