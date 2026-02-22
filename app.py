@@ -19,11 +19,13 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- 資料抓取與計算 ---
+@st.cache_data(ttl=300) # 加入快取機制，每 5 分鐘更新一次，提升載入速度
 def fetch_index_data(symbol):
     try:
+        # 抓取 2 年資料以計算 MA240
         data = yf.download(symbol, period="2y", progress=False)
         if data.empty: return None
-        # 確保取回單一浮點數
+        # 確保取回單一數值
         current = float(data["Close"].iloc[-1])
         ma60 = float(data["Close"].rolling(60).mean().iloc[-1])
         ma240 = float(data["Close"].rolling(240).mean().iloc[-1])
@@ -74,17 +76,16 @@ c_p2.markdown(f"SOX 佔比：<span style='color:{ratio_color(p_sox)}; font-size:
 st.divider()
 
 # 4. 指數監控與能量條 (自動化 2x2 網格佈局)
-# 已將黃金代碼更新為 XAU=F
+# 已將黃金代碼修正為 GC=F 以匹配 5000+ 的報價
 tickers = {
     "^NDX": "NASDAQ 100 (NDX)", 
     "^SOX": "費城半導體 (SOX)",
-    "XAU=F": "黃金 (XAU=F)",
+    "GC=F": "國際黃金 (GC=F)",
     "GDX": "黃金礦業 ETF (GDX)"
 }
 
 items = list(tickers.items())
 
-# 每 2 個標的產生一排，達成 2x2 佈局
 for i in range(0, len(items), 2):
     cols = st.columns(2)
     for j in range(2):
@@ -97,26 +98,22 @@ for i in range(0, len(items), 2):
                     status_text, h_color, bar_grad = get_style_config(pct, curr, m240)
                     
                     # --- 智慧小數點判斷 ---
-                    # GDX 價格較低，保留 2 位小數；其他高價標的(包含黃金)顯示為整數
-                    if symbol == "GDX":
+                    # 針對黃金與 GDX 顯示小數點，其餘整數
+                    if symbol in ["GDX", "GC=F"]:
                         v_curr, v_m60, v_m240 = f"{curr:,.2f}", f"{m60:,.2f}", f"{m240:,.2f}"
                     else:
                         v_curr, v_m60, v_m240 = f"{int(curr):,}", f"{int(m60):,}", f"{int(m240):,}"
                     
-                    # 顏色同動與文字渲染
                     st.markdown(f"<div class='metric-title' style='color:{h_color};'>{name}</div>", unsafe_allow_html=True)
                     st.markdown(f"<div class='value-text' style='color:{h_color};'>當前報價：{v_curr}</div>", unsafe_allow_html=True)
                     st.markdown(f"<div class='value-text' style='color:{h_color};'>季線 MA60：{v_m60}</div>", unsafe_allow_html=True)
                     st.markdown(f"<div class='value-text' style='color:{h_color};'>年線 MA240：{v_m240}</div>", unsafe_allow_html=True)
                     
-                    # 顯示燈號與百分比
                     st.markdown(f"<div style='color:{h_color}; font-weight:bold; font-size:20px; margin-top:10px; display:flex; justify-content:space-between;'>"
                                 f"<span>{status_text}</span><span>距季線：{pct:+.2f}%</span></div>", unsafe_allow_html=True)
                     
-                    # 能量條長度：連動百分比，最高限制 40% (保底 5% 以顯示顏色)
                     fill_width = min(max(abs(pct), 5.0), 40.0) 
                     st.markdown(f"<div class='energy-bar-container'><div class='energy-bar-fill' style='width: {fill_width}%; background: {bar_grad};'></div></div>", unsafe_allow_html=True)
                 else:
                     st.error(f"無法獲取 {name} 數據")
-    # 每排之間加入一點間距
     st.write("<br>", unsafe_allow_html=True)
