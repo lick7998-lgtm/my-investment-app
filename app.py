@@ -18,7 +18,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 資料抓取與安全計算 (解決 ValueError) ---
+# --- 資料抓取與安全計算 ---
 def fetch_index_data(symbol):
     try:
         df = yf.download(symbol, period="2y", progress=False)
@@ -38,32 +38,29 @@ def fetch_index_data(symbol):
         
         pct = ((current - ma60) / ma60) * 100
         return current, ma60, ma240, pct
-    except Exception as e:
+    except Exception:
         return None
 
 # --- 取得單一匯率 ---
 def fetch_fx_rate(symbol):
     try:
-        df = yf.download(symbol, period="1d", progress=False)
+        df = yf.download(symbol, period="5d", progress=False)
+        if df.empty: return None
         if isinstance(df.columns, pd.MultiIndex):
             return float(df['Close'].iloc[-1, 0])
         else:
             return float(df['Close'].iloc[-1])
-    except:
+    except Exception:
         return None
 
 # --- 顏色與漸層配置 (100 -> 250) ---
 def get_style_config(pct, current, ma240):
-    if current < ma240: # 🔴 跌破年線 -> 紅燈
-        status, color_hex = "🔴 紅燈 (跌破年線)", "#FF0000"
-        grad = "linear-gradient(to right, rgb(100,0,0), rgb(250,0,0))"
-    elif pct < 0: # 🟡 跌破季線 -> 黃燈
-        status, color_hex = "🟡 黃燈 (跌破季線)", "#FFFF00"
-        grad = "linear-gradient(to right, rgb(100,100,0), rgb(250,250,0))"
-    else: # 🟢 季線之上 -> 綠燈
-        status, color_hex = "🟢 綠燈 (季線之上)", "#00FF00"
-        grad = "linear-gradient(to right, rgb(0,100,0), rgb(0,250,0))"
-    return status, color_hex, grad
+    if current < ma240: 
+        return "🔴 紅燈 (跌破年線)", "#FF0000", "linear-gradient(to right, rgb(100,0,0), rgb(250,0,0))"
+    elif pct < 0: 
+        return "🟡 黃燈 (跌破季線)", "#FFFF00", "linear-gradient(to right, rgb(100,100,0), rgb(250,250,0))"
+    else: 
+        return "🟢 綠燈 (季線之上)", "#00FF00", "linear-gradient(to right, rgb(0,100,0), rgb(0,250,0))"
 
 st.title("📡 投資趨勢監控系統")
 
@@ -98,8 +95,7 @@ audusd_rate = fetch_fx_rate("AUDUSD=X")
 if not audusd_rate:
     st.warning("⚠️ 無法取得 AUD/USD 匯率，黃金換算可能受影響。")
 
-# 4. 指數監控與能量條 (自動化 2x2 網格佈局)
-# 🎯 黃金改抓 XAUUSD=X，之後在顯示時換算為 XAUD
+# 4. 指數監控與能量條
 tickers = {
     "^NDX": "NASDAQ 100 (NDX)", 
     "^SOX": "費城半導體 (SOX)",
@@ -109,7 +105,6 @@ tickers = {
 
 items = list(tickers.items())
 
-# 每 2 個標的產生一排，達成 2x2 佈局
 for i in range(0, len(items), 2):
     cols = st.columns(2)
     for j in range(2):
@@ -120,7 +115,7 @@ for i in range(0, len(items), 2):
                 if res:
                     curr, m60, m240, pct = res
                     
-                    # 🎯 針對黃金現貨進行後台匯率換算 (XAUUSD -> XAUD)
+                    # 🎯 黃金現貨後台匯率換算 (XAUUSD -> XAUD)
                     if symbol == "XAUUSD=X" and audusd_rate:
                         curr = curr / audusd_rate
                         m60 = m60 / audusd_rate
@@ -128,14 +123,32 @@ for i in range(0, len(items), 2):
                     
                     status_text, h_color, bar_grad = get_style_config(pct, curr, m240)
                     
-                    # --- 智慧小數點判斷 ---
-                    # 只有 GDX 價格較低保留 2 位小數，包含換算後的 XAUD 在內的高價標的全部改為整數顯示！
+                    # 智慧小數點：GDX 留2位小數，其餘整數
                     if symbol == "GDX":
                         v_curr, v_m60, v_m240 = f"{curr:,.2f}", f"{m60:,.2f}", f"{m240:,.2f}"
                     else:
                         v_curr, v_m60, v_m240 = f"{int(curr):,}", f"{int(m60):,}", f"{int(m240):,}"
                     
-                    # 顏色同動與文字渲染
-                    st.markdown(f"<div class='metric-title' style='color:{h_color};'>{name}</div>", unsafe_allow_html=True)
-                    st.markdown(f"<div class='value-text' style='color:{h_color};'>當前報價：{v_curr}</div>", unsafe_allow_html=True)
-                    st.markdown(f"<div class='value-text
+                    # 🚀 改用多行字串，避免 SyntaxError
+                    html_content = f"""
+                    <div class='metric-title' style='color:{h_color};'>{name}</div>
+                    <div class='value-text' style='color:{h_color};'>當前報價：{v_curr}</div>
+                    <div class='value-text' style='color:{h_color};'>季線 MA60：{v_m60}</div>
+                    <div class='value-text' style='color:{h_color};'>年線 MA240：{v_m240}</div>
+                    <div style='color:{h_color}; font-weight:bold; font-size:20px; margin-top:10px; display:flex; justify-content:space-between;'>
+                        <span>{status_text}</span>
+                        <span>距季線：{pct:+.2f}%</span>
+                    </div>
+                    """
+                    st.markdown(html_content, unsafe_allow_html=True)
+                    
+                    fill_width = min(max(abs(pct), 5.0), 40.0) 
+                    bar_html = f"""
+                    <div class='energy-bar-container'>
+                        <div class='energy-bar-fill' style='width: {fill_width}%; background: {bar_grad};'></div>
+                    </div>
+                    """
+                    st.markdown(bar_html, unsafe_allow_html=True)
+                else:
+                    st.error(f"無法獲取 {name} 數據，請稍後再試。")
+    st.write("<br>", unsafe_allow_html=True)
