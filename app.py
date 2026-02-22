@@ -1,122 +1,135 @@
-import streamlit as st
 import yfinance as yf
-import pandas as pd
+import math
 
-st.set_page_config(
-    page_title="投資趨勢監控系統",
-    layout="wide"
-)
-
-# 縮短 CSS 長度，分行寫避免被截斷
-CSS = """
-<style>
-* { text-shadow: none !important; }
-.title { font-size: 26px; font-weight: bold; }
-.val { font-size: 22px; font-weight: bold; }
-.form { font-size: 16px; color: #AAA; }
-.bar-bg {
-    background: #0d0d0d;
-    border-radius: 8px;
-    width: 100%;
-    height: 26px;
-    margin-top: 10px;
-}
-.bar-fill {
-    height: 26px;
-    border-radius: 8px;
-}
-</style>
-"""
-st.markdown(CSS, unsafe_allow_html=True)
-
+# -----------------------------
+# Helper: 安全抓取 Yahoo 價格
+# -----------------------------
 def safe_price(ticker):
+    """
+    安全抓取 Yahoo 最新成交價，加入 fallback
+    """
     try:
-        tk = yf.Ticker(ticker)
-        try:
-            if hasattr(tk, 'fast_info'):
-                info = tk.fast_info
-                if hasattr(info, 'get'):
-                    p = info.get("lastPrice")
-                else:
-                    p = getattr(info, 'last_price', None)
-                if p: return float(p)
-        except:
-            pass
-        
-        hist = tk.history(period="5d")
-        if not hist.empty and 'Close' in hist.columns:
-            clean = hist['Close'].dropna()
-            if not clean.empty:
-                return float(clean.iloc[-1])
-    except:
+        data = yf.Ticker(ticker).fast_info
+
+        # 第一優先：即時價格
+        price = data.get("lastPrice")
+        if price is not None:
+            return price
+
+        # 第二優先：收盤價
+        price = data.get("regularMarketPreviousClose")
+        if price is not None:
+            return price
+
+        # fallback：用 history
+        hist = yf.Ticker(ticker).history(period="1d")
+        if not hist.empty:
+            return hist["Close"].iloc[-1]
+
+    except Exception as e:
+        print(f"抓取 {ticker} 失敗：", e)
         return None
+
     return None
 
-def fetch_data(symbol):
+# -----------------------------
+# Helper: 計算移動平均線
+# -----------------------------
+def moving_average(ticker, period):
+    """
+    計算指定期間的移動平均線
+    """
     try:
-        df = yf.download(symbol, period="2y", progress=False)
-        if df.empty: return None
-        
-        if isinstance(df.columns, pd.MultiIndex):
-            s = df['Close'].iloc[:, 0]
-        else:
-            s = df['Close']
-            
-        s = s.dropna()
-        if s.empty: return None
-        
-        curr = float(s.iloc[-1])
-        m60 = float(s.rolling(60).mean().dropna().iloc[-1])
-        m240 = float(s.rolling(240).mean().dropna().iloc[-1])
-        
-        pct = ((curr - m60) / m60) * 100
-        return curr, m60, m240, pct
-    except:
+        hist = yf.Ticker(ticker).history(period=f"{period}d")
+        if hist.empty:
+            return None
+        ma = hist["Close"].tail(period).mean()
+        return ma
+    except Exception as e:
+        print(f"計算 {ticker} MA{period} 失敗：", e)
         return None
 
-def get_style(pct, curr, m240):
-    # 這裡原本太長導致您截圖報錯，我已將其分成極短的行
-    if curr < m240:
-        return (
-            "🔴 紅燈 (跌破年線)",
-            "#FF0000",
-            "linear-gradient(90deg, #640000, #FA0000)"
-        )
-    elif pct < 0:
-        return (
-            "🟡 黃燈 (跌破季線)",
-            "#FFFF00",
-            "linear-gradient(90deg, #646400, #FAFA00)"
-        )
+# -----------------------------
+# 計算 XAUD
+# -----------------------------
+def get_XAUD():
+    XAUUSD = safe_price("XAUUSD=X")
+    AUDUSD = safe_price("AUDUSD=X")  # Yahoo 沒有 USDAUD=X
+
+    if XAUUSD is None or AUDUSD is None:
+        return None, "XAUUSD 或 AUDUSD 抓取失敗"
+
+    USDAUD = 1 / AUDUSD
+    XAUD = XAUUSD * USDAUD
+    return int(XAUD), None
+
+# -----------------------------
+# 計算單一標的資訊
+# -----------------------------
+def get_stock_info(ticker):
+    price = safe_price(ticker)
+    ma60 = moving_average(ticker, 60)
+    ma240 = moving_average(ticker, 240)
+
+    if price is None or ma60 is None or ma240 is None:
+        return None
+
+    # 判斷綠燈 / 黃燈
+    if price >= ma60:
+        light = "綠燈 (季線之上)"
+        dist_ma = (price - ma60) / ma60 * 100
     else:
-        return (
-            "🟢 綠燈 (季線之上)",
-            "#00FF00",
-            "linear-gradient(90deg, #006400, #00FA00)"
-        )
+        light = "黃燈 (跌破季線)"
+        dist_ma = (price - ma60) / ma60 * 100
 
-st.title("📡 投資趨勢監控系統")
+    return {
+        "price": price,
+        "MA60": ma60,
+        "MA240": ma240,
+        "light": light,
+        "dist_ma": dist_ma
+    }
 
-st.subheader("💰 投資金額輸入")
-c1, c2 = st.columns(2)
-with c1:
-    amt_n = st.number_input("NDX", value=0, format="%d")
-with c2:
-    amt_s = st.number_input("SOX", value=0, format="%d")
+# -----------------------------
+# 主程式
+# -----------------------------
+def main():
+    # 費城半導體 ETF (SOX)
+    sox_info = get_stock_info("SOXX")  # Yahoo ticker: SOXX
+    if sox_info:
+        print("費城半導體 (SOX)")
+        print(f"當前報價：{sox_info['price']}")
+        print(f"季線 MA60：{sox_info['MA60']:.2f}")
+        print(f"年線 MA240：{sox_info['MA240']:.2f}")
+        print(f"{sox_info['light']} 距季線：{sox_info['dist_ma']:.2f}%")
+    else:
+        print("SOX 資料抓取失敗")
 
-tot = amt_n + amt_s
-pn = (amt_n / tot * 100) if tot > 0 else 0
-ps = (amt_s / tot * 100) if tot > 0 else 0
-st.info(f"💵 總預算: **${tot:,}**")
+    print("\n------------------\n")
 
-def c_pct(v):
-    if v > 50: return "#FF0000"
-    if v < 50: return "#00FF00"
-    return "#FFFFFF"
+    # 黃金礦業 ETF (GDX)
+    gdx_info = get_stock_info("GDX")
+    if gdx_info:
+        print("黃金礦業 ETF (GDX)")
+        print(f"當前報價：{gdx_info['price']}")
+        print(f"季線 MA60：{gdx_info['MA60']:.2f}")
+        print(f"年線 MA240：{gdx_info['MA240']:.2f}")
+        print(f"{gdx_info['light']} 距季線：{gdx_info['dist_ma']:.2f}%")
+    else:
+        print("GDX 資料抓取失敗")
 
-cp1, cp2 = st.columns(2)
-html_n = f"<span style='color:{c_pct(pn)};'>{pn:.1f}%</span>"
-cp1.markdown(f"NDX: **{html_n}**", unsafe_allow_html=True)
+    print("\n------------------\n")
 
-html_s = f"<span style='color:{c_pct(ps)};'>{ps:.1f}%</span>"
-cp2.markdown(f
+    # 黃金現貨對澳幣 (XAUD)
+    xaud_price, xaud_err = get_XAUD()
+    if xaud_err:
+        print("XAUD 計算失敗：", xaud_err)
+    else:
+        print("黃金現貨 (XAUD)")
+        print(f"當前報價：{xaud_price}")
+
+# -----------------------------
+# 執行
+# -----------------------------
+if __name__ == "__main__":
+    main()
