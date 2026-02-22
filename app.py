@@ -73,12 +73,12 @@ c_p2.markdown(f"SOX 佔比：<span style='color:{ratio_color(p_sox)}; font-size:
 
 st.divider()
 
-# 4. 指數監控與能量條 (加入黃金，自動化 2x2 網格佈局)
-# 依照要求將黃金現貨改為追蹤 XAUD
+# 4. 指數監控與能量條 (自動化 2x2 網格佈局)
+# 已將黃金代碼更新為 XAU=F
 tickers = {
     "^NDX": "NASDAQ 100 (NDX)", 
     "^SOX": "費城半導體 (SOX)",
-    "XAUD": "黃金現貨 (XAUD)",
+    "XAU=F": "黃金 (XAU=F)",
     "GDX": "黃金礦業 ETF (GDX)"
 }
 
@@ -97,7 +97,7 @@ for i in range(0, len(items), 2):
                     status_text, h_color, bar_grad = get_style_config(pct, curr, m240)
                     
                     # --- 智慧小數點判斷 ---
-                    # GDX 價格較低，保留 2 位小數；其他高價標的顯示為整數
+                    # GDX 價格較低，保留 2 位小數；其他高價標的(包含黃金)顯示為整數
                     if symbol == "GDX":
                         v_curr, v_m60, v_m240 = f"{curr:,.2f}", f"{m60:,.2f}", f"{m240:,.2f}"
                     else:
