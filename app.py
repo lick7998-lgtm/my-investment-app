@@ -2,117 +2,214 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 
-# 設定網頁標題與佈局
-st.set_page_config(page_title="投資趨勢監控系統", layout="wide")
+st.set_page_config(
+    page_title="投資趨勢監控",
+    layout="wide"
+)
 
-# --- 核心 CSS ---
-st.markdown("""
+# 極短行 CSS，防止斷字
+CSS = """
 <style>
-* { text-shadow: none !important; -webkit-font-smoothing: antialiased; }
-.metric-title { font-size: 26px; font-weight: 700; margin-bottom: 5px; }
-.value-text { font-size: 22px; font-weight: 600; margin-bottom: 5px; }
-.energy-bar-container { background-color: #0d0d0d; border-radius: 8px; width: 100%; height: 26px; margin-top: 10px; overflow: hidden; border: 1px solid #333; }
-.energy-bar-fill { height: 26px; border-radius: 8px; transition: width 0.6s ease-in-out; }
+* { text-shadow: none !important; }
+.title { font-size: 26px; font-weight: 700; }
+.val { font-size: 22px; font-weight: 600; }
+.sub { font-size: 16px; color: #AAA; }
+.bar-bg {
+    background: #111;
+    border-radius: 8px;
+    height: 24px;
+    margin-top: 8px;
+}
+.bar-fill {
+    height: 24px;
+    border-radius: 8px;
+}
 </style>
-""", unsafe_allow_html=True)
+"""
+st.markdown(CSS, unsafe_allow_html=True)
 
-# --- 資料抓取與計算 ---
-@st.cache_data(ttl=300)
-def fetch_index_data(symbol):
+def safe_price(ticker):
     try:
-        data = yf.download(symbol, period="2y", progress=False)
-        if data.empty: return None
-        current = float(data["Close"].iloc[-1])
-        ma60 = float(data["Close"].rolling(60).mean().iloc[-1])
-        ma240 = float(data["Close"].rolling(240).mean().iloc[-1])
-        pct = ((current - ma60) / ma60) * 100
-        return current, ma60, ma240, pct
-    except Exception as e:
+        tk = yf.Ticker(ticker)
+        # 嘗試 fast_info
+        try:
+            if hasattr(tk, 'fast_info'):
+                info = tk.fast_info
+                # 兼容不同寫法
+                if hasattr(info, 'last_price'):
+                    p = info.last_price
+                else:
+                    p = info.get('lastPrice')
+                if p: return float(p)
+        except:
+            pass
+        
+        # 嘗試歷史數據
+        hist = tk.history(period="5d")
+        if not hist.empty:
+            return float(hist['Close'].iloc[-1])
+    except:
+        return None
+    return None
+
+def fetch_data(sym):
+    try:
+        d = yf.download(sym, period="2y", progress=False)
+        if d.empty: return None
+        
+        if isinstance(d.columns, pd.MultiIndex):
+            s = d['Close'].iloc[:, 0]
+        else:
+            s = d['Close']
+            
+        s = s.dropna()
+        if s.empty: return None
+        
+        cur = float(s.iloc[-1])
+        m60 = float(s.rolling(60).mean().iloc[-1])
+        m240 = float(s.rolling(240).mean().iloc[-1])
+        pct = ((cur - m60) / m60) * 100
+        return cur, m60, m240, pct
+    except:
         return None
 
-# --- 顏色與漸層配置 ---
-def get_style_config(pct, current, ma240):
-    if current < ma240:
-        status, color_hex = "🔴 紅燈 (跌破年線)", "#FF0000"
-        grad = "linear-gradient(to right, rgb(100,0,0), rgb(250,0,0))"
-    elif pct < 0:
-        status, color_hex = "🟡 黃燈 (跌破季線)", "#FFFF00"
-        grad = "linear-gradient(to right, rgb(100,100,0), rgb(250,250,0))"
+def get_style(p, c, m240):
+    if c < m240:
+        return (
+            "🔴 紅燈 (跌破年線)",
+            "#FF0000",
+            "linear-gradient(90deg, #640000, #FF0000)"
+        )
+    elif p < 0:
+        return (
+            "🟡 黃燈 (跌破季線)",
+            "#FFFF00",
+            "linear-gradient(90deg, #646400, #FFFF00)"
+        )
     else:
-        status, color_hex = "🟢 綠燈 (季線之上)", "#00FF00"
-        grad = "linear-gradient(to right, rgb(0,100,0), rgb(0,250,0))"
-    return status, color_hex, grad
+        return (
+            "🟢 綠燈 (季線之上)",
+            "#00FF00",
+            "linear-gradient(90deg, #006400, #00FF00)"
+        )
 
 st.title("📡 投資趨勢監控系統")
 
-# 1. 投資金額輸入 (包含 NDX, SOX, 債券, 黃金)
-st.subheader("💰 投資金額輸入")
-col_in1, col_in2, col_in3, col_in4 = st.columns(4)
-with col_in1:
-    amt_ndx = st.number_input("NDX 金額 (USD)", min_value=0, value=0, step=100)
-with col_in2:
-    amt_sox = st.number_input("SOX 金額 (USD)", min_value=0, value=0, step=100)
-with col_in3:
-    amt_bond = st.number_input("債券金額 (USD)", min_value=0, value=0, step=100)
-with col_in4:
-    amt_gold = st.number_input("黃金金額 (USD)", min_value=0, value=0, step=100)
+# 輸入區
+st.subheader("💰 資金佔比試算")
+c1, c2 = st.columns(2)
+with c1:
+    v_ndx = st.number_input("NDX 金額", value=0, format="%d")
+with c2:
+    v_sox = st.number_input("SOX 金額", value=0, format="%d")
 
-# 2. 自動加總
-total = amt_ndx + amt_sox + amt_bond + amt_gold
-st.info(f"💵 總投資預算 (自動加總): **${total:,}**")
+tot = v_ndx + v_sox
+r_n = (v_ndx / tot * 100) if tot > 0 else 0
+r_s = (v_sox / tot * 100) if tot > 0 else 0
+st.info(f"💵 總計: **${tot:,}**")
 
-# 3. 顯示佔比
-def ratio_color(val):
-    if val > 40: return "#FF4B4B"
-    return "#00FF00"
+k1, k2 = st.columns(2)
+def color(v):
+    return "#FF0000" if v > 50 else "#00FF00"
 
-if total > 0:
-    p_ndx, p_sox = (amt_ndx/total)*100, (amt_sox/total)*100
-    p_bond, p_gold = (amt_bond/total)*100, (amt_gold/total)*100
-    
-    c_p1, c_p2, c_p3, c_p4 = st.columns(4)
-    c_p1.markdown(f"NDX 佔比<br><span style='color:{ratio_color(p_ndx)}; font-size:24px; font-weight:bold;'>{p_ndx:.1f}%</span>", unsafe_allow_html=True)
-    c_p2.markdown(f"SOX 佔比<br><span style='color:{ratio_color(p_sox)}; font-size:24px; font-weight:bold;'>{p_sox:.1f}%</span>", unsafe_allow_html=True)
-    c_p3.markdown(f"債券 佔比<br><span style='color:{ratio_color(p_bond)}; font-size:24px; font-weight:bold;'>{p_bond:.1f}%</span>", unsafe_allow_html=True)
-    c_p4.markdown(f"黃金 佔比<br><span style='color:{ratio_color(p_gold)}; font-size:24px; font-weight:bold;'>{p_gold:.1f}%</span>", unsafe_allow_html=True)
+h_n = f"<span style='color:{color(r_n)}'>{r_n:.1f}%</span>"
+k1.markdown(f"NDX: **{h_n}**", unsafe_allow_html=True)
+
+h_s = f"<span style='color:{color(r_s)}'>{r_s:.1f}%</span>"
+k2.markdown(f"SOX: **{h_s}**", unsafe_allow_html=True)
 
 st.divider()
 
-# 4. 指數監控與能量條 (已將代碼設回 GC=F)
-tickers = {
-    "^NDX": "NASDAQ 100 (NDX)", 
-    "^SOX": "費城半導體 (SOX)",
-    "GC=F": "國際黃金 (GC=F)",
-    "GDX": "黃金礦業 ETF (GDX)"
-}
+# 監控列表：確保 NDX 在第一個
+tickers = [
+    ("^NDX", "NASDAQ 100 (NDX)"),
+    ("^SOX", "費城半導體 (SOX)"),
+    ("XAUD_FIX", "黃金現貨 (XAUD)"),
+    ("GDX", "黃金礦業 ETF (GDX)")
+]
 
-items = list(tickers.items())
-
-for i in range(0, len(items), 2):
-    cols = st.columns(2)
+for i in range(0, 4, 2):
+    row = st.columns(2)
     for j in range(2):
-        if i + j < len(items):
-            symbol, name = items[i + j]
-            with cols[j]:
-                res = fetch_index_data(symbol)
-                if res:
-                    curr, m60, m240, pct = res
-                    status_text, h_color, bar_grad = get_style_config(pct, curr, m240)
+        sym, name = tickers[i+j]
+        with row[j]:
+            # XAUD 特別處理
+            if sym == "XAUD_FIX":
+                usd = safe_price("XAUUSD=X")
+                aud = safe_price("AUDUSD=X")
+                if usd and aud:
+                    # 換算公式
+                    val = int(usd / aud)
                     
-                    # 智慧顯示：黃金與 GDX 保留小數點，其餘整數
-                    if symbol in ["GDX", "GC=F"]:
-                        v_curr, v_m60, v_m240 = f"{curr:,.2f}", f"{m60:,.2f}", f"{m240:,.2f}"
+                    st.markdown(
+                        f"<div class='title' style='color:#FFD700'>"
+                        f"{name}</div>",
+                        unsafe_allow_html=True
+                    )
+                    st.markdown(
+                        f"<div class='sub'>"
+                        f"公式: {usd:,.0f} / {aud:.4f}</div>",
+                        unsafe_allow_html=True
+                    )
+                    st.markdown(
+                        f"<div class='val' style='color:#FFD700'>"
+                        f"報價: {val:,}</div>",
+                        unsafe_allow_html=True
+                    )
+                else:
+                    st.error("黃金數據讀取失敗")
+            
+            # 一般指數 (NDX, SOX, GDX)
+            else:
+                data = fetch_data(sym)
+                if data:
+                    cur, m60, m240, pct = data
+                    txt, col, grad = get_style(pct, cur, m240)
+                    
+                    if sym == "GDX":
+                        vc = f"{cur:,.2f}"
+                        v6 = f"{m60:,.2f}"
+                        v2 = f"{m240:,.2f}"
                     else:
-                        v_curr, v_m60, v_m240 = f"{int(curr):,}", f"{int(m60):,}", f"{int(m240):,}"
+                        vc = f"{int(cur):,}"
+                        v6 = f"{int(m60):,}"
+                        v2 = f"{int(m240):,}"
+
+                    st.markdown(
+                        f"<div class='title' style='color:{col}'>"
+                        f"{name}</div>",
+                        unsafe_allow_html=True
+                    )
+                    st.markdown(
+                        f"<div class='val' style='color:{col}'>"
+                        f"報價: {vc}</div>",
+                        unsafe_allow_html=True
+                    )
+                    st.markdown(
+                        f"<div class='val' style='color:{col}'>"
+                        f"季線: {v6}</div>",
+                        unsafe_allow_html=True
+                    )
+                    st.markdown(
+                        f"<div class='val' style='color:{col}'>"
+                        f"年線: {v2}</div>",
+                        unsafe_allow_html=True
+                    )
+                    st.markdown(
+                        f"<div style='color:{col};font-weight:bold'>"
+                        f"{txt} | 距季線: {pct:+.2f}%</div>",
+                        unsafe_allow_html=True
+                    )
                     
-                    st.markdown(f"<div class='metric-title' style='color:{h_color};'>{name}</div>", unsafe_allow_html=True)
-                    st.markdown(f"<div class='value-text' style='color:{h_color};'>當前報價：{v_curr}</div>", unsafe_allow_html=True)
-                    st.markdown(f"<div class='value-text' style='color:{h_color};'>季線 MA60：{v_m60}</div>", unsafe_allow_html=True)
-                    st.markdown(f"<div class='value-text' style='color:{h_color};'>年線 MA240：{v_m240}</div>", unsafe_allow_html=True)
-                    
-                    st.markdown(f"<div style='color:{h_color}; font-weight:bold; font-size:20px; margin-top:10px; display:flex; justify-content:space-between;'>"
-                                f"<span>{status_text}</span><span>距季線：{pct:+.2f}%</span></div>", unsafe_allow_html=True)
-                    
-                    fill_width = min(max(abs(pct), 5.0), 40.0) 
-                    st.markdown(f"<div class='energy-bar-container'><div class='energy-bar-fill' style='width: {fill_width}%; background: {bar_grad};'></div></div>", unsafe_allow_html=True)
+                    # 能量條
+                    w = min(max(abs(pct), 5.0), 40.0)
+                    bar = (
+                        f"<div class='bar-bg'>"
+                        f"<div class='bar-fill' style='"
+                        f"width:{w}%;background:{grad}'>"
+                        f"</div></div>"
+                    )
+                    st.markdown(bar, unsafe_allow_html=True)
+                else:
+                    st.error(f"無法取得 {name}")
     st.write("<br>", unsafe_allow_html=True)
