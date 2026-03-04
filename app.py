@@ -112,4 +112,12 @@ for row_idx in range(0, len(ticker_list), 2):
                     st.markdown(f"<div class='value-text' style='color:{h_color};'>季線 MA60：{v_m60}</div>", unsafe_allow_html=True)
                     st.markdown(f"<div class='value-text' style='color:{h_color};'>年線 MA240：{v_m240}</div>", unsafe_allow_html=True)
                     
-                    st.markdown(f"<div style
+                    st.markdown(f"<div style='color:{h_color}; font-weight:bold; font-size:20px; margin-top:10px; display:flex; justify-content:space-between;'>"
+                                f"<span>{status_text}</span><span>距季線：{pct:+.2f}%</span></div>", unsafe_allow_html=True)
+                    
+                    # 能量條長度邏輯
+                    fill_width = min(max(abs(pct), 5.0), 40.0) 
+                    st.markdown(f"<div class='energy-bar-container'><div class='energy-bar-fill' style='width: {fill_width}%; background: {bar_grad};'></div></div>", unsafe_allow_html=True)
+                else:
+                    st.error(f"無法獲取 {name} 數據")
+    st.write("<br>", unsafe_allow_html=True)
