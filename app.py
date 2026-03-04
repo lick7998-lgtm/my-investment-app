@@ -27,18 +27,18 @@ def fetch_index_data(symbol):
         ma240 = float(data["Close"].rolling(240).mean().iloc[-1])
         pct = ((current - ma60) / ma60) * 100
         return current, ma60, ma240, pct
-    except Exception as e:
+    except Exception:
         return None
 
 # --- 顏色與漸層配置 ---
 def get_style_config(pct, current, ma240):
-    if current < ma240:
+    if current < ma240: # 🔴 跌破年線
         status, color_hex = "🔴 紅燈 (跌破年線)", "#FF0000"
         grad = "linear-gradient(to right, rgb(100,0,0), rgb(250,0,0))"
-    elif pct < 0:
+    elif pct < 0: # 🟡 跌破季線
         status, color_hex = "🟡 黃燈 (跌破季線)", "#FFFF00"
         grad = "linear-gradient(to right, rgb(100,100,0), rgb(250,250,0))"
-    else:
+    else: # 🟢 季線之上
         status, color_hex = "🟢 綠燈 (季線之上)", "#00FF00"
         grad = "linear-gradient(to right, rgb(0,100,0), rgb(0,250,0))"
     return status, color_hex, grad
@@ -63,8 +63,7 @@ st.info(f"💵 總投資預算 (自動加總): **${total:,}**")
 
 # 3. 顯示佔比
 def ratio_color(val):
-    if val > 40: return "#FF4B4B"
-    return "#00FF00"
+    return "#FF4B4B" if val > 40 else "#00FF00"
 
 if total > 0:
     p_ndx, p_sox = (amt_ndx/total)*100, (amt_sox/total)*100
@@ -78,7 +77,7 @@ if total > 0:
 
 st.divider()
 
-# 4. 指數監控與能量條 (修正迴圈邏輯確保所有項目顯示)
+# 4. 指數監控：確保 NDX, SOX, GC=F, GDX 全部顯示
 tickers = {
     "^NDX": "NASDAQ 100 (NDX)", 
     "^SOX": "費城半導體 (SOX)",
@@ -86,43 +85,31 @@ tickers = {
     "GDX": "黃金礦業 ETF (GDX)"
 }
 
-items = list(tickers.items())
+# 將 tickers 轉為列表方便索引
+ticker_list = list(tickers.items())
 
-# 修正網格顯示邏輯
-for i in range(0, len(items), 2):
+# 使用每行 2 欄的佈局渲染
+for row_idx in range(0, len(ticker_list), 2):
     cols = st.columns(2)
-    # 第一個子項目
-    with cols[0]:
-        symbol, name = items[i]
-        res = fetch_index_data(symbol)
-        if res:
-            curr, m60, m240, pct = res
-            status_text, h_color, bar_grad = get_style_config(pct, curr, m240)
-            v_curr, v_m60, v_m240 = (f"{curr:,.2f}", f"{m60:,.2f}", f"{m240:,.2f}") if symbol in ["GDX", "GC=F"] else (f"{int(curr):,}", f"{int(m60):,}", f"{int(m240):,}")
-            st.markdown(f"<div class='metric-title' style='color:{h_color};'>{name}</div>", unsafe_allow_html=True)
-            st.markdown(f"<div class='value-text' style='color:{h_color};'>當前報價：{v_curr}</div>", unsafe_allow_html=True)
-            st.markdown(f"<div class='value-text' style='color:{h_color};'>季線 MA60：{v_m60}</div>", unsafe_allow_html=True)
-            st.markdown(f"<div class='value-text' style='color:{h_color};'>年線 MA240：{v_m240}</div>", unsafe_allow_html=True)
-            st.markdown(f"<div style='color:{h_color}; font-weight:bold; font-size:20px; margin-top:10px; display:flex; justify-content:space-between;'>"
-                        f"<span>{status_text}</span><span>距季線：{pct:+.2f}%</span></div>", unsafe_allow_html=True)
-            fill_width = min(max(abs(pct), 5.0), 40.0) 
-            st.markdown(f"<div class='energy-bar-container'><div class='energy-bar-fill' style='width: {fill_width}%; background: {bar_grad};'></div></div>", unsafe_allow_html=True)
-
-    # 第二個子項目 (檢查是否存在)
-    if i + 1 < len(items):
-        with cols[1]:
-            symbol, name = items[i+1]
-            res = fetch_index_data(symbol)
-            if res:
-                curr, m60, m240, pct = res
-                status_text, h_color, bar_grad = get_style_config(pct, curr, m240)
-                v_curr, v_m60, v_m240 = (f"{curr:,.2f}", f"{m60:,.2f}", f"{m240:,.2f}") if symbol in ["GDX", "GC=F"] else (f"{int(curr):,}", f"{int(m60):,}", f"{int(m240):,}")
-                st.markdown(f"<div class='metric-title' style='color:{h_color};'>{name}</div>", unsafe_allow_html=True)
-                st.markdown(f"<div class='value-text' style='color:{h_color};'>當前報價：{v_curr}</div>", unsafe_allow_html=True)
-                st.markdown(f"<div class='value-text' style='color:{h_color};'>季線 MA60：{v_m60}</div>", unsafe_allow_html=True)
-                st.markdown(f"<div class='value-text' style='color:{h_color};'>年線 MA240：{v_m240}</div>", unsafe_allow_html=True)
-                st.markdown(f"<div style='color:{h_color}; font-weight:bold; font-size:20px; margin-top:10px; display:flex; justify-content:space-between;'>"
-                            f"<span>{status_text}</span><span>距季線：{pct:+.2f}%</span></div>", unsafe_allow_html=True)
-                fill_width = min(max(abs(pct), 5.0), 40.0) 
-                st.markdown(f"<div class='energy-bar-container'><div class='energy-bar-fill' style='width: {fill_width}%; background: {bar_grad};'></div></div>", unsafe_allow_html=True)
-    st.write("<br>", unsafe_allow_html=True)
+    for col_idx in range(2):
+        item_idx = row_idx + col_idx
+        if item_idx < len(ticker_list):
+            symbol, name = ticker_list[item_idx]
+            with cols[col_idx]:
+                res = fetch_index_data(symbol)
+                if res:
+                    curr, m60, m240, pct = res
+                    status_text, h_color, bar_grad = get_style_config(pct, curr, m240)
+                    
+                    # 智慧格式化：黃金與 GDX 保留兩位小數
+                    if symbol in ["GDX", "GC=F"]:
+                        v_curr, v_m60, v_m240 = f"{curr:,.2f}", f"{m60:,.2f}", f"{m240:,.2f}"
+                    else:
+                        v_curr, v_m60, v_m240 = f"{int(curr):,}", f"{int(m60):,}", f"{int(m240):,}"
+                    
+                    st.markdown(f"<div class='metric-title' style='color:{h_color};'>{name}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='value-text' style='color:{h_color};'>當前報價：{v_curr}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='value-text' style='color:{h_color};'>季線 MA60：{v_m60}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='value-text' style='color:{h_color};'>年線 MA240：{v_m240}</div>", unsafe_allow_html=True)
+                    
+                    st.markdown(f"<div style
