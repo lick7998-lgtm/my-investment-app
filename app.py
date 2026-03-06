@@ -77,18 +77,19 @@ if total > 0:
 
 st.divider()
 
-# 4. 指數監控：確保 NDX, SOX, GC=F, GDX 全部顯示
+# 4. 指數監控：包含原有的 4 項 + 新增的原油指標
 tickers = {
     "^NDX": "NASDAQ 100 (NDX)", 
     "^SOX": "費城半導體 (SOX)",
     "GC=F": "國際黃金 (GC=F)",
-    "GDX": "黃金礦業 ETF (GDX)"
+    "GDX": "黃金礦業 ETF (GDX)",
+    "CL=F": "紐約輕原油 (WTI)",
+    "BZ=F": "布蘭特原油 (BRENT)"
 }
 
-# 將 tickers 轉為列表方便索引
 ticker_list = list(tickers.items())
 
-# 使用每行 2 欄的佈局渲染
+# 使用每行 2 欄的佈局渲染，共 3 排
 for row_idx in range(0, len(ticker_list), 2):
     cols = st.columns(2)
     for col_idx in range(2):
@@ -101,8 +102,8 @@ for row_idx in range(0, len(ticker_list), 2):
                     curr, m60, m240, pct = res
                     status_text, h_color, bar_grad = get_style_config(pct, curr, m240)
                     
-                    # 智慧格式化：黃金與 GDX 保留兩位小數
-                    if symbol in ["GDX", "GC=F"]:
+                    # 格式化顯示：黃金、GDX 與原油保留兩位小數
+                    if symbol in ["GDX", "GC=F", "CL=F", "BZ=F"]:
                         v_curr, v_m60, v_m240 = f"{curr:,.2f}", f"{m60:,.2f}", f"{m240:,.2f}"
                     else:
                         v_curr, v_m60, v_m240 = f"{int(curr):,}", f"{int(m60):,}", f"{int(m240):,}"
@@ -115,7 +116,6 @@ for row_idx in range(0, len(ticker_list), 2):
                     st.markdown(f"<div style='color:{h_color}; font-weight:bold; font-size:20px; margin-top:10px; display:flex; justify-content:space-between;'>"
                                 f"<span>{status_text}</span><span>距季線：{pct:+.2f}%</span></div>", unsafe_allow_html=True)
                     
-                    # 能量條長度邏輯
                     fill_width = min(max(abs(pct), 5.0), 40.0) 
                     st.markdown(f"<div class='energy-bar-container'><div class='energy-bar-fill' style='width: {fill_width}%; background: {bar_grad};'></div></div>", unsafe_allow_html=True)
                 else:
